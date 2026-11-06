@@ -1,3 +1,11 @@
+# Gordons Booking
+
+Dies ist die eigene Entwicklung auf Basis von OpenResto v2.5.0. Der Standardzweig
+ist `gordons`; die lokale Einrichtung und der Updateablauf stehen in
+[GORDONS.md](GORDONS.md). Die geplanten Gordons-Erweiterungen sind noch nicht
+implementiert. Die nachfolgenden Projektangaben und Status-Badges beschreiben das
+Originalprojekt.
+
 # OpenResto
 
 [![Release](https://img.shields.io/github/v/release/karanshukla/openresto)](https://github.com/karanshukla/openresto/releases/latest)
