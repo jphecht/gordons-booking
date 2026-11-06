@@ -304,11 +304,14 @@ public class RepositoryTests : IDisposable
     // ── Configurable booking duration (#135) ────────────────────────────────
 
     [Fact]
-    public async Task BookingRepository_IsTableBookedOnDateAsync_UsesCustomDuration_ForLegacyBookingWithoutEndTime()
+    public async Task BookingRepository_IsTableBookedOnDateAsync_UsesLocationDuration_ForLegacyBookingWithoutEndTime()
     {
         using AppDbContext db = CreateContext();
         (Restaurant? restaurant, Section? section, Table? table) = SeedRestaurantData(db);
         var repo = new BookingRepository(db);
+
+        restaurant.DefaultBookingDurationMinutes = 90;
+        await db.SaveChangesAsync();
 
         DateTime bookingDate = DateTime.UtcNow.Date.AddDays(10).AddHours(12).ToUniversalTime();
 
@@ -326,11 +329,12 @@ public class RepositoryTests : IDisposable
         });
 
         // 75 minutes after the legacy booking's start: outside the old fixed 60-minute
-        // window, but still inside a 90-minute configured duration.
+        // window, but still inside the existing location's 90-minute configured duration.
+        // Changing the new request's window must not change this existing occupancy.
         bool isBookedWithDefaultDuration = await repo.IsTableBookedOnDateAsync(table.Id, bookingDate.AddMinutes(75));
         bool isBookedWithNinetyMinuteDuration = await repo.IsTableBookedOnDateAsync(table.Id, bookingDate.AddMinutes(75), durationMinutes: 90);
 
-        Assert.False(isBookedWithDefaultDuration);
+        Assert.True(isBookedWithDefaultDuration);
         Assert.True(isBookedWithNinetyMinuteDuration);
     }
 
@@ -340,6 +344,9 @@ public class RepositoryTests : IDisposable
         using AppDbContext db = CreateContext();
         (Restaurant? restaurant, Section? section, Table? table) = SeedRestaurantData(db);
         var repo = new BookingRepository(db);
+
+        restaurant.DefaultBookingDurationMinutes = 30;
+        await db.SaveChangesAsync();
 
         DateTime bookingDate = DateTime.UtcNow.Date.AddDays(11).AddHours(12).ToUniversalTime();
 
@@ -356,9 +363,8 @@ public class RepositoryTests : IDisposable
             BookingRef = "SHORT1"
         });
 
-        // 45 minutes after start: outside a 30-minute window (over-rejected by the old
-        // fixed 60-minute assumption, correctly allowed with a 30-minute duration).
-        bool isBooked = await repo.IsTableBookedOnDateAsync(table.Id, bookingDate.AddMinutes(45), durationMinutes: 30);
+        // Exactly adjacent to the existing 30-minute sitting, even when the new party stays longer.
+        bool isBooked = await repo.IsTableBookedOnDateAsync(table.Id, bookingDate.AddMinutes(30), durationMinutes: 60);
 
         Assert.False(isBooked);
     }

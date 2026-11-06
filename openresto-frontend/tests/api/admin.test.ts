@@ -444,9 +444,15 @@ describe("adminExtendBooking", () => {
     expect(JSON.parse(opts.body)).toEqual({ minutes: 30 });
   });
 
-  it("returns null on failure", async () => {
-    mockFetch.mockResolvedValueOnce({ ok: false });
-    expect(await adminExtendBooking(5, 30)).toBeNull();
+  it("throws the server's conflict reason instead of silently returning null", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 409,
+      json: async () => ({ message: "A following reservation would overlap." }),
+    });
+    await expect(adminExtendBooking(5, 30)).rejects.toThrow(
+      "A following reservation would overlap."
+    );
   });
 });
 
@@ -1128,17 +1134,30 @@ describe("extendRestaurantBookings", () => {
   });
 
   it("returns ok false with empty array on non-ok response", async () => {
-    mockFetch.mockResolvedValueOnce({ ok: false });
+    mockFetch.mockResolvedValueOnce({ ok: false, json: async () => ({}) });
 
     const result = await extendRestaurantBookings(4, 15);
-    expect(result).toEqual({ ok: false, extendedBookings: [] });
+    expect(result).toEqual({ ok: false, extendedBookings: [], error: "Failed to extend bookings" });
   });
 
   it("returns ok false with empty array on network error", async () => {
     mockFetch.mockRejectedValueOnce(new Error("offline"));
 
     const result = await extendRestaurantBookings(4, 15);
-    expect(result).toEqual({ ok: false, extendedBookings: [] });
+    expect(result).toEqual({ ok: false, extendedBookings: [], error: "offline" });
+  });
+
+  it("returns the conflict reason for a rejected bulk extension", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 409,
+      json: async () => ({ message: "One table has a following reservation." }),
+    });
+    expect(await extendRestaurantBookings(4, 15)).toEqual({
+      ok: false,
+      extendedBookings: [],
+      error: "One table has a following reservation.",
+    });
   });
 
   it("falls back to empty array when extendedBookings is absent from response", async () => {

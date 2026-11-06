@@ -269,6 +269,22 @@ describe("AdminLocationsScreen", () => {
     await waitFor(() => expect(screen.getByText("No active bookings to extend")).toBeTruthy());
   });
 
+  it("shows a bulk-extension conflict without showing success", async () => {
+    (extendRestaurantBookings as jest.Mock).mockResolvedValue({
+      ok: false,
+      extendedBookings: [],
+      error: "One table has a following reservation.",
+    });
+    renderScreen();
+    await waitFor(() => expect(screen.getByText("Extend 2 active Bookings by 60m")).toBeTruthy());
+    await act(async () => {
+      fireEvent.press(screen.getByText("Extend 2 active Bookings by 60m"));
+    });
+    expect(screen.getByText("One table has a following reservation.")).toBeTruthy();
+    expect(screen.getByText("Extend 2 active Bookings by 60m")).toBeTruthy();
+    expect(screen.queryByText("No active bookings to extend")).toBeNull();
+  });
+
   it("shows extended count on button after extend succeeds and locks it", async () => {
     (extendRestaurantBookings as jest.Mock).mockResolvedValue({
       ok: true,

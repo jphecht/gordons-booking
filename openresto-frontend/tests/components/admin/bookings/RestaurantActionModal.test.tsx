@@ -35,6 +35,35 @@ describe("RestaurantActionModal", () => {
     (adminApi.adminGetRestaurants as jest.Mock).mockResolvedValue(mockRestaurants);
   });
 
+  it("shows a rejected bulk extension and keeps the dialog open", async () => {
+    const onClose = jest.fn();
+    const onSuccess = jest.fn();
+    (adminApi.extendRestaurantBookings as jest.Mock).mockResolvedValue({
+      ok: false,
+      extendedBookings: [],
+      error: "One table has a following reservation.",
+    });
+    const screen = render(
+      <RestaurantActionModal visible actionType="extend" onClose={onClose} onSuccess={onSuccess} />
+    );
+    await waitFor(() => expect(screen.queryByTestId("loading-indicator")).toBeNull());
+    fireEvent.press(screen.getByText("Test Restaurant 1"));
+    await waitFor(() =>
+      expect(screen.getByText("One table has a following reservation.")).toBeTruthy()
+    );
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onSuccess).not.toHaveBeenCalled();
+
+    (adminApi.extendRestaurantBookings as jest.Mock).mockResolvedValueOnce({
+      ok: true,
+      extendedBookings: [],
+    });
+    fireEvent.press(screen.getByText("Test Restaurant 1"));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(adminApi.extendRestaurantBookings).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText("One table has a following reservation.")).toBeNull();
+  });
+
   it("renders correctly when visible and type is pause", async () => {
     const { getByText, queryByTestId } = render(
       <RestaurantActionModal visible={true} actionType="pause" onClose={() => {}} />
