@@ -113,20 +113,8 @@ namespace OpenRestoApi.Infrastructure.Persistence.Repositories
 #pragma warning restore CA1862, CA1311, CA1304
         }
 
-        public async Task<bool> IsTableBookedOnDateAsync(int tableId, DateTime bookingDate, int durationMinutes = 60)
-        {
-            DateTime newStart = bookingDate.ToUniversalTime();
-            DateTime newEnd = newStart.AddMinutes(durationMinutes);
-            DateTime thresholdStart = newStart.AddMinutes(-durationMinutes); // For legacy bookings without EndTime
-
-            // Half-open overlap: existing starts before the new window ends, and ends after it
-            // begins. A booking that ends exactly when this one starts is not a conflict.
-            return await _db.Bookings.AnyAsync(b =>
-                b.TableId == tableId &&
-                !b.IsCancelled &&
-                b.Date < newEnd &&
-                (b.EndTime != null ? b.EndTime > newStart : b.Date > thresholdStart));
-        }
+        public Task<bool> IsTableBookedOnDateAsync(int tableId, DateTime bookingDate, int durationMinutes = 60)
+            => IsUnitBookedOnDateAsync(tableId, null, bookingDate, durationMinutes);
 
         /// <summary>
         /// Group-aware conflict check. Resolves the set of physical table ids and group ids that count
@@ -134,20 +122,26 @@ namespace OpenRestoApi.Infrastructure.Persistence.Repositories
         /// window reserves one of those tables (directly or via a group), or one of those groups.
         /// See <see cref="IBookingRepository.IsUnitBookedOnDateAsync"/> for the contract.
         /// </summary>
-        public async Task<bool> IsUnitBookedOnDateAsync(
+        public Task<bool> IsUnitBookedOnDateAsync(
             int? tableId,
             int? tableGroupId,
             DateTime bookingDate,
             int durationMinutes = 60,
             int? excludeBookingId = null)
-        {
-            DateTime newStart = bookingDate.ToUniversalTime();
-            DateTime newEnd = newStart.AddMinutes(durationMinutes);
-            DateTime thresholdStart = newStart.AddMinutes(-durationMinutes);
+            => HasOccupancyConflictAsync(tableId, tableGroupId, AsUtc(bookingDate),
+                AsUtc(bookingDate).AddMinutes(durationMinutes), durationMinutes, excludeBookingId);
 
-            // Resolve every table id that counts as reserved by this unit. Booking a table also
-            // reserves its group's other members (they can't be pushed together while one is taken);
-            // booking a group reserves all of its members.
+        public async Task<bool> HasOccupancyConflictAsync(
+            int? tableId, int? tableGroupId, DateTime startUtc, DateTime endUtc,
+            int fallbackDurationMinutes = 60, int? excludeBookingId = null)
+        {
+            DateTime newStart = AsUtc(startUtc);
+            DateTime newEnd = AsUtc(endUtc);
+            if (newEnd <= newStart) return false;
+
+            // A single-table booking occupies only that table; a combined-table booking
+            // occupies every member. Group reservations touching any of these tables are
+            // included below without preventing separate bookings on different members.
             var reservedTableIds = new HashSet<int>();
 
             if (tableGroupId.HasValue)
@@ -185,14 +179,30 @@ namespace OpenRestoApi.Infrastructure.Persistence.Repositories
                 reservedGroupIds.Add(tableGroupId.Value);
             }
 
-            return await _db.Bookings.AnyAsync(b =>
+            var candidates = await _db.Bookings.Where(b =>
                 !b.IsCancelled &&
                 (excludeBookingId == null || b.Id != excludeBookingId.Value) &&
                 b.Date < newEnd &&
-                (b.EndTime != null ? b.EndTime > newStart : b.Date > thresholdStart) &&
+                (b.EndTime == null || b.EndTime <= b.Date || b.EndTime > newStart) &&
                 ((b.TableId.HasValue && reservedTableIds.Contains(b.TableId.Value)) ||
-                 (b.TableGroupId.HasValue && reservedGroupIds.Contains(b.TableGroupId.Value))));
+                 (b.TableGroupId.HasValue && reservedGroupIds.Contains(b.TableGroupId.Value))))
+                .Select(b => new
+                {
+                    b.Date, b.EndTime, b.Status,
+                    DefaultMinutes = _db.Restaurants.Where(r => r.Id == b.RestaurantId)
+                        .Select(r => (int?)r.DefaultBookingDurationMinutes).FirstOrDefault(),
+                }).ToListAsync();
+
+            return candidates.Any(b =>
+                !(b.Status.HasEnded() && b.EndTime.HasValue && b.EndTime <= b.Date)
+                && BookingDuration.ResolveEnd(b.Date, b.EndTime,
+                    b.DefaultMinutes ?? fallbackDurationMinutes) > newStart);
         }
+
+        private static DateTime AsUtc(DateTime value)
+            => value.Kind == DateTimeKind.Unspecified
+                ? DateTime.SpecifyKind(value, DateTimeKind.Utc)
+                : value.ToUniversalTime();
 
         public async Task<IEnumerable<Booking>> GetActiveBookingsForDateAsync(int restaurantId, DateTime bookingDate)
         {
@@ -260,15 +270,8 @@ namespace OpenRestoApi.Infrastructure.Persistence.Repositories
                 .ToListAsync();
         }
 
-        public async Task<bool> HasConflictAsync(int? tableId, DateTime newStart, DateTime newEnd, int fallbackDurationMinutes, int? excludeBookingId = null)
-        {
-            return await _db.Bookings.AnyAsync(b =>
-                b.TableId == tableId &&
-                !b.IsCancelled &&
-                (excludeBookingId == null || b.Id != excludeBookingId.Value) &&
-                b.Date < newEnd &&
-                (b.EndTime != null ? b.EndTime > newStart : b.Date.AddMinutes(fallbackDurationMinutes) > newStart));
-        }
+        public Task<bool> HasConflictAsync(int? tableId, DateTime newStart, DateTime newEnd, int fallbackDurationMinutes, int? excludeBookingId = null)
+            => HasOccupancyConflictAsync(tableId, null, newStart, newEnd, fallbackDurationMinutes, excludeBookingId);
 
         public async Task<int> CountDistinctBookedTablesAsync(int restaurantId, DateTime startUtc, DateTime endUtc)
         {

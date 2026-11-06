@@ -13,8 +13,8 @@ public interface IBookingRepository
     /// <summary>
     /// Returns true if a confirmed booking exists for this table whose occupancy window overlaps
     /// [<paramref name="bookingDate"/>, <paramref name="bookingDate"/> + <paramref name="durationMinutes"/>).
-    /// For existing bookings without an explicit <c>EndTime</c>, <paramref name="durationMinutes"/> is
-    /// also used as the fallback occupancy window.
+    /// Existing bookings without an explicit <c>EndTime</c> use their location's default;
+    /// <paramref name="durationMinutes"/> is the fallback if that location is missing.
     /// </summary>
     Task<bool> IsTableBookedOnDateAsync(int tableId, DateTime bookingDate, int durationMinutes = 60);
 
@@ -45,6 +45,14 @@ public interface IBookingRepository
         DateTime bookingDate,
         int durationMinutes = 60,
         int? excludeBookingId = null);
+    /// <summary>
+    /// Checks the exact half-open interval against reservations of the same physical tables,
+    /// including combined tables. Uses each existing location's default for legacy null ends.
+    /// The caller must later put this check and its write in the same transaction.
+    /// </summary>
+    Task<bool> HasOccupancyConflictAsync(
+        int? tableId, int? tableGroupId, DateTime startUtc, DateTime endUtc,
+        int fallbackDurationMinutes = 60, int? excludeBookingId = null);
     /// <summary>Returns all non-cancelled bookings for a specific restaurant and local date.</summary>
     Task<IEnumerable<Booking>> GetActiveBookingsForDateAsync(int restaurantId, DateTime bookingDate);
 
@@ -77,10 +85,11 @@ public interface IBookingRepository
     Task<List<Booking>> GetForRestaurantInUtcRangeAsync(int restaurantId, DateTime startUtc, DateTime endUtc);
 
     /// <summary>
-    /// True if any other booking on the same table overlaps the window
+    /// True if any other booking on the same physical table (including a combined-table booking) overlaps the window
     /// [<paramref name="newStart"/>, <paramref name="newEnd"/>). Existing bookings without an
-    /// explicit <see cref="Booking.EndTime"/> use <c>Booking.Date + <paramref name="fallbackDurationMinutes"/></c>
-    /// as their end. Pass <paramref name="excludeBookingId"/> to skip a booking being updated.
+    /// explicit <see cref="Booking.EndTime"/> use the existing location's default duration,
+    /// or <paramref name="fallbackDurationMinutes"/> if that location is missing.
+    /// Pass <paramref name="excludeBookingId"/> to skip a booking being updated.
     /// </summary>
     Task<bool> HasConflictAsync(int? tableId, DateTime newStart, DateTime newEnd, int fallbackDurationMinutes, int? excludeBookingId = null);
 

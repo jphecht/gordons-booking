@@ -1997,8 +1997,8 @@ public partial class AdminServiceTests : IDisposable
         // 1. Currently active (started 30 mins ago)
         _db.Bookings.Add(new Booking { Id = 1, RestaurantId = 1, SectionId = 1, TableId = 1, Date = nowUtc.AddMinutes(-30), BookingRef = "ACTIVE" });
 
-        // 2. Future (starting in 1 hour)
-        _db.Bookings.Add(new Booking { Id = 2, RestaurantId = 1, SectionId = 1, TableId = 1, Date = nowUtc.AddHours(1), BookingRef = "FUTURE" });
+        // 2. Future, beyond the extended sitting. A conflict has its own rejection test.
+        _db.Bookings.Add(new Booking { Id = 2, RestaurantId = 1, SectionId = 1, TableId = 1, Date = nowUtc.AddHours(2), BookingRef = "FUTURE" });
 
         // 3. Past (ended 1 hour ago)
         _db.Bookings.Add(new Booking { Id = 3, RestaurantId = 1, SectionId = 1, TableId = 1, Date = nowUtc.AddHours(-3), EndTime = nowUtc.AddHours(-1), BookingRef = "PAST" });

@@ -246,6 +246,10 @@ public class AdminService(
 
         if (booking.UndoStatus(nowUtc) == target)
         {
+            if (booking.OriginalEndTime.HasValue)
+            {
+                await RejectIfOccupancyTakenAsync(booking, booking.OriginalEndTime.Value);
+            }
             booking.UndoStatusChange();
         }
         else if (booking.NextStatuses(nowUtc).Contains(target))
@@ -395,7 +399,9 @@ public class AdminService(
             booking.Date, booking.EndTime, restaurant?.DefaultBookingDurationMinutes);
 
         DateTime? previousEnd = booking.EndTime;
-        booking.EndTime = from.AddMinutes(minutes);
+        DateTime proposedEnd = from.AddMinutes(minutes);
+        if (!booking.IsCancelled) await RejectIfOccupancyTakenAsync(booking, proposedEnd);
+        booking.EndTime = proposedEnd;
         await _bookingRepository.UpdateAsync(booking);
 
         _audit.RecordChange("endTime", previousEnd, booking.EndTime);
@@ -460,6 +466,11 @@ public class AdminService(
             throw new BusinessRuleException("Booking is already active.") { Code = ErrorCodes.BookingAlreadyActive };
         }
 
+        Restaurant? restaurant = await _restaurantRepository.FindByIdAsync(booking.RestaurantId);
+        DateTime end = booking.Status.HasEnded() && booking.EndTime.HasValue
+            ? booking.EndTime.Value
+            : BookingDuration.ResolveEnd(booking.Date, booking.EndTime, restaurant?.DefaultBookingDurationMinutes);
+        await RejectIfOccupancyTakenAsync(booking, end);
         booking.IsCancelled = false;
         booking.CancelledAt = null;
         await _bookingRepository.UpdateAsync(booking);
@@ -651,11 +662,12 @@ public class AdminService(
 
         // The unit the booking actually occupies, not the one the request named: a group booking
         // carries TableId = null, and a table-only check would miss every group on the floor.
-        bool taken = await _bookingRepository.IsUnitBookedOnDateAsync(
+        bool taken = await _bookingRepository.HasOccupancyConflictAsync(
             booking.TableId,
             booking.TableGroupId,
             AsUtc(booking.Date),
-            OccupancyMinutes(booking, durationMinutes),
+            AsUtc(booking.EndTime ?? booking.Date.AddMinutes(durationMinutes)),
+            durationMinutes,
             excludeBookingId: id);
 
         if (taken)
@@ -664,16 +676,16 @@ public class AdminService(
         }
     }
 
-    /// <summary>How long the booking holds its unit: its own span when it has one, else the default.</summary>
-    private static int OccupancyMinutes(Booking booking, int fallbackMinutes)
+    private async Task RejectIfOccupancyTakenAsync(Booking booking, DateTime proposedEnd)
     {
-        if (!booking.EndTime.HasValue)
+        bool taken = await _bookingRepository.HasOccupancyConflictAsync(
+            booking.TableId, booking.TableGroupId, AsUtc(booking.Date), AsUtc(proposedEnd),
+            excludeBookingId: booking.Id);
+        if (taken)
         {
-            return fallbackMinutes;
+            throw new ConflictException("This change would overlap an existing reservation.")
+            { Code = ErrorCodes.BookingTableConflict };
         }
-
-        int span = (int)(booking.EndTime.Value - booking.Date).TotalMinutes;
-        return span > 0 ? span : fallbackMinutes;
     }
 
     /// <summary>
@@ -770,11 +782,17 @@ public class AdminService(
 
         List<Booking> activeBookings = await _bookingRepository.GetInProgressForRestaurantAsync(restaurantId, nowUtc, restaurant.DefaultBookingDurationMinutes);
 
-        foreach (Booking? booking in activeBookings)
+        var proposedEnds = new Dictionary<int, DateTime>();
+        foreach (Booking booking in activeBookings)
         {
             DateTime currentEndTime = booking.EndTime ?? booking.Date.AddMinutes(restaurant.DefaultBookingDurationMinutes);
-            booking.EndTime = currentEndTime.AddMinutes(extensionMinutes);
+            DateTime proposedEnd = currentEndTime.AddMinutes(extensionMinutes);
+            await RejectIfOccupancyTakenAsync(booking, proposedEnd);
+            proposedEnds.Add(booking.Id, proposedEnd);
         }
+
+        // Do not mutate tracked rows until every table has passed validation.
+        foreach (Booking booking in activeBookings) booking.EndTime = proposedEnds[booking.Id];
 
         // Single SaveChanges flushes every mutated EndTime — same DB round-trip count as the
         // original implementation. The entities are already tracked on the shared DI-scoped DbContext.

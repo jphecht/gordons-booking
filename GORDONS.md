@@ -62,6 +62,23 @@ Produktionssicherung importiert. Die anfangs sichtbaren Restaurants sind die
 synthetischen OpenResto-Beispiele. Eine eigene Testbelegung für Gordons wird
 später ausschließlich aus erfundenen Gästen und abgestimmten Tischdaten erstellt.
 
+## Buchungsregressionen lokal prüfen
+
+Die HTTP-Regressionen für Tischkombinationen, Verlängerung, Sammelverlängerung,
+Wiederherstellen und Status-Undo verwenden jeweils eine neue SQLite-Datei mit
+eigenständigen Verbindungen. Der Testcontainer erhält keine Datenvolumes, keine
+Zugangsdaten aus der Testinstallation und kein Netzwerk:
+
+```sh
+docker --context colima-gordons-booking build -f dev/gordons-tests/Dockerfile -t gordons-booking-tests:local .
+docker --context colima-gordons-booking run --rm --network none gordons-booking-tests:local --filter FullyQualifiedName~BookingOccupancyGuardsTests
+```
+
+Ohne `--filter` läuft die gesamte Backendsuite. Der Build benötigt Internet für
+öffentliche .NET-Pakete. Diese fachlichen Prüfungen verhindern noch keine Rennen
+zwischen parallelen Anfragen: Die gemeinsame Schreibtransaktion, dauerhafte
+Vormerkungen und wiederholsichere Buchungsbefehle bleiben weitere Arbeitspakete.
+
 ## GitHub und Updates
 
 `origin` ist der eigene Fork, `upstream` das Original. Der lokale Push-Zugang zu
