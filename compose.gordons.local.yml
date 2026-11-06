@@ -1,0 +1,75 @@
+# Separate local test installation; never use this file for production.
+name: gordons-booking-local
+
+services:
+  backend:
+    image: ghcr.io/karanshukla/openresto-backend:2.5.0
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      PORT: "8080"
+      CORS_ORIGINS: http://localhost:5062,http://127.0.0.1:5062
+      WEBSITE_URL: http://localhost:5062
+      CONNECTION_STRING: Data Source=/data/openresto.db
+      DATA_PROTECTION_KEYS_PATH: /data/dp-keys
+      JWT_KEY: ${JWT_KEY:?Run the local init command first}
+      ADMIN_EMAIL: admin@gordons.test
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Run the local init command first}
+      OPENRESTO_DEFAULT_LOCALE: de
+      OPENRESTO_REPOSITORY_URL: https://github.com/jphecht/gordons-booking
+    volumes:
+      - db_data:/data
+      - media_data:/app/wwwroot/media
+    networks: [isolated]
+    healthcheck:
+      test: [CMD, curl, -fsS, http://127.0.0.1:8080/api/health]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+
+  frontend:
+    image: ghcr.io/karanshukla/openresto-frontend:2.5.0
+    networks: [isolated]
+    healthcheck:
+      test: [CMD, curl, -fsS, http://127.0.0.1:8081/]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  reverse-proxy:
+    image: ghcr.io/karanshukla/openresto-nginx:2.5.0
+    environment:
+      PORT: "80"
+      BACKEND_HOST: backend
+      BACKEND_PORT: "8080"
+      FRONTEND_HOST: frontend
+      FRONTEND_PORT: "8081"
+    ports:
+      - 127.0.0.1:5062:80
+    volumes:
+      - media_data:/usr/share/nginx/html/media:ro
+    networks: [isolated]
+    depends_on:
+      backend: {condition: service_healthy}
+      frontend: {condition: service_healthy}
+
+  mailpit:
+    image: axllent/mailpit:v1.32.0
+    environment:
+      MP_SMTP_AUTH_ACCEPT_ANY: "true"
+      MP_SMTP_AUTH_ALLOW_INSECURE: "true"
+      MP_DATABASE: /data/mailpit.db
+    ports:
+      - 127.0.0.1:8025:8025
+    volumes:
+      - mail_data:/data
+    networks: [isolated]
+
+networks:
+  isolated:
+    internal: true
+
+volumes:
+  db_data:
+  media_data:
+  mail_data:

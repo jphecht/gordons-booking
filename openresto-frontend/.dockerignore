@@ -1,0 +1,10 @@
+node_modules
+.expo
+dist
+.env
+.env.*
+*.env
+coverage
+playwright-report
+test-results
+e2e/.auth

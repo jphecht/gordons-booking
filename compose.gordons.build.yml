@@ -1,0 +1,19 @@
+# Apply on top of compose.gordons.local.yml to run our own source builds.
+services:
+  backend:
+    image: gordons-booking-backend:local
+    build:
+      context: .
+      dockerfile: OpenRestoApi/Dockerfile
+  frontend:
+    image: gordons-booking-frontend:local
+    build:
+      context: ./openresto-frontend
+      dockerfile: Dockerfile
+      args:
+        EXPO_PUBLIC_API_URL: /api
+  reverse-proxy:
+    image: gordons-booking-nginx:local
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile

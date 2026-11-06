@@ -1,4 +1,7 @@
 **/.git
+.gordons-local
+**/*.env
+**/appsettings.Local.json
 **/.vscode
 **/node_modules
 **/bin

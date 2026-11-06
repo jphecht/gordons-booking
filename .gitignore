@@ -1,4 +1,5 @@
 # Root .gitignore for the repository
+.gordons-local/
 
 # Node / frontend
 node_modules/
