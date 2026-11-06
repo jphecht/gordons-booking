@@ -66,6 +66,7 @@ jobs:
           - {context: ., dockerfile: OpenRestoApi/Dockerfile, name: backend}
           - {context: openresto-frontend, dockerfile: openresto-frontend/Dockerfile, name: frontend}
           - {context: nginx, dockerfile: nginx/Dockerfile, name: nginx}
+          - {context: dev/gordons-gateway, dockerfile: dev/gordons-gateway/Dockerfile, name: gateway}
     steps:
       - uses: actions/checkout@v7
       - name: Build ARM64 image without publication

@@ -3,7 +3,7 @@ name: gordons-booking-local
 
 services:
   backend:
-    image: ghcr.io/karanshukla/openresto-backend:2.5.0
+    image: ghcr.io/karanshukla/openresto-backend:2.5.0@sha256:944db59b1141657303d822cca174c61f16a97a74991ec5ea11e39623cc9d009e
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       PORT: "8080"
@@ -12,8 +12,11 @@ services:
       CONNECTION_STRING: Data Source=/data/openresto.db
       DATA_PROTECTION_KEYS_PATH: /data/dp-keys
       JWT_KEY: ${JWT_KEY:?Run the local init command first}
+      Jwt__Key: ${JWT_KEY:?Run the local init command first}
       ADMIN_EMAIL: admin@gordons.test
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Run the local init command first}
+      Admin__Email: admin@gordons.test
+      Admin__Password: ${ADMIN_PASSWORD:?Run the local init command first}
       OPENRESTO_DEFAULT_LOCALE: de
       OPENRESTO_REPOSITORY_URL: https://github.com/jphecht/gordons-booking
     volumes:
@@ -28,7 +31,7 @@ services:
       start_period: 20s
 
   frontend:
-    image: ghcr.io/karanshukla/openresto-frontend:2.5.0
+    image: ghcr.io/karanshukla/openresto-frontend:2.5.0@sha256:61bb7823c234e97ef3d3c0819a739c5a45d0776f6fe61dfb4d89814f750eada1
     networks: [isolated]
     healthcheck:
       test: [CMD, curl, -fsS, http://127.0.0.1:8081/]
@@ -37,15 +40,13 @@ services:
       retries: 20
 
   reverse-proxy:
-    image: ghcr.io/karanshukla/openresto-nginx:2.5.0
+    image: ghcr.io/karanshukla/openresto-nginx:2.5.0@sha256:b484130f3fb22a39b7e5ea65fcfbd23f4fe58d94125c26c4a830bda05bc1ff38
     environment:
       PORT: "80"
       BACKEND_HOST: backend
       BACKEND_PORT: "8080"
       FRONTEND_HOST: frontend
       FRONTEND_PORT: "8081"
-    ports:
-      - 127.0.0.1:5062:80
     volumes:
       - media_data:/usr/share/nginx/html/media:ro
     networks: [isolated]
@@ -54,20 +55,38 @@ services:
       frontend: {condition: service_healthy}
 
   mailpit:
-    image: axllent/mailpit:v1.32.0
+    image: axllent/mailpit:v1.32.0@sha256:0790692be935ea4420d085694f7985b1f692ca6a8771ab0e0bd8ba75ac180498
     environment:
       MP_SMTP_AUTH_ACCEPT_ANY: "true"
       MP_SMTP_AUTH_ALLOW_INSECURE: "true"
       MP_DATABASE: /data/mailpit.db
-    ports:
-      - 127.0.0.1:8025:8025
     volumes:
       - mail_data:/data
     networks: [isolated]
 
+  local-gateway:
+    image: gordons-booking-gateway:local
+    build:
+      context: ./dev/gordons-gateway
+    ports:
+      - 127.0.0.1:5062:80
+      - 127.0.0.1:8025:8025
+    networks: [isolated, local_entry]
+    depends_on:
+      reverse-proxy: {condition: service_healthy}
+      mailpit: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, curl, -fsS, http://127.0.0.1/health]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 networks:
   isolated:
     internal: true
+  # Only the gateway has this network so Docker can publish localhost ports.
+  # Backend, frontend and Mailpit have no route to the Internet.
+  local_entry: {}
 
 volumes:
   db_data:

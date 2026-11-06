@@ -47,8 +47,11 @@ den reservierten Arbeitsspeicher frei.
 Das Startskript akzeptiert ausschließlich den lokalen Docker-Socket des eigenen
 Colima-Profils. Es prüft Netz, Ports und Volumes und übernimmt keine Docker-,
 Compose- oder Zugangsdatenvariablen aus einer anderen Shell-Umgebung.
-Die Container verwenden ein internes Netz ohne ausgehende Internetverbindung;
-die beiden Webports sind nur an `127.0.0.1` gebunden. E-Mails bleiben im lokalen
+Backend, Frontend und Mailpit verwenden ein internes Netz ohne ausgehende
+Internetverbindung. Ein zusätzlicher Zugangsproxy besitzt ein zweites Netz,
+damit Docker die beiden Webports an `127.0.0.1` veröffentlichen kann. Dieser
+Proxy hat weder Datenvolumes noch Zugangsdaten und leitet nur an die beiden
+festen internen Webdienste weiter. E-Mails bleiben im lokalen
 Mailpit. Placetel, Push-Zugänge und Produktionsschlüssel werden nicht eingerichtet.
 Paket- und Imageabrufe während des Bauens laufen außerhalb dieses Laufzeitnetzes.
 Die Testoberfläche kann weiterhin externe Links/Medien im Browser enthalten;

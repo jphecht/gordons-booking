@@ -45,10 +45,18 @@ jest.mock("@/hooks/use-color-scheme", () => ({
 }));
 
 describe("Existing modals wire onRequestClose (precondition for web Escape-to-close)", () => {
-  it("wires ConfirmModal's onRequestClose to its onCancel handler", () => {
+  const mountedTrees: TestRenderer.ReactTestRenderer[] = [];
+
+  afterEach(async () => {
+    await TestRenderer.act(async () => {
+      for (const tree of mountedTrees.splice(0)) tree.unmount();
+    });
+  });
+
+  it("wires ConfirmModal's onRequestClose to its onCancel handler", async () => {
     const onCancel = jest.fn();
     let tree!: TestRenderer.ReactTestRenderer;
-    TestRenderer.act(() => {
+    await TestRenderer.act(async () => {
       tree = TestRenderer.create(
         <BrandProvider>
           <ConfirmModal
@@ -59,6 +67,7 @@ describe("Existing modals wire onRequestClose (precondition for web Escape-to-cl
           />
         </BrandProvider>
       );
+      mountedTrees.push(tree);
     });
 
     const modal = tree.root.findByType(Modal);
@@ -68,15 +77,16 @@ describe("Existing modals wire onRequestClose (precondition for web Escape-to-cl
     expect(onCancel).toHaveBeenCalledTimes(1);
   });
 
-  it("wires AlertModal's onRequestClose to its onClose handler", () => {
+  it("wires AlertModal's onRequestClose to its onClose handler", async () => {
     const onClose = jest.fn();
     let tree!: TestRenderer.ReactTestRenderer;
-    TestRenderer.act(() => {
+    await TestRenderer.act(async () => {
       tree = TestRenderer.create(
         <BrandProvider>
           <AlertModal visible message="Something happened" onClose={onClose} />
         </BrandProvider>
       );
+      mountedTrees.push(tree);
     });
 
     const modal = tree.root.findByType(Modal);

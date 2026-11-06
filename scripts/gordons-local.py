@@ -60,12 +60,15 @@ def check_configuration(source):
     if config["name"] != PROJECT:
         raise ValueError("Unerwarteter Projektname.")
     networks = config["networks"]
-    if any(not network.get("internal") or network.get("external") for network in networks.values()):
-        raise ValueError("Abbruch: Das Testnetz muss intern und eigenständig bleiben.")
+    if (set(networks) != {"isolated", "local_entry"}
+            or not networks["isolated"].get("internal")
+            or any(network.get("external") for network in networks.values())):
+        raise ValueError("Abbruch: Unerwartete Netztrennung.")
     if any(volume.get("external") for volume in config["volumes"].values()):
         raise ValueError("Abbruch: Fremde Datenvolumes sind nicht erlaubt.")
-    for service in config["services"].values():
-        if service.get("network_mode") or set(service.get("networks", {})) - set(networks):
+    for name, service in config["services"].items():
+        expected_networks = {"isolated", "local_entry"} if name == "local-gateway" else {"isolated"}
+        if service.get("network_mode") or set(service.get("networks", {})) != expected_networks:
             raise ValueError("Abbruch: Abweichendes Containernetz.")
         if service.get("privileged") or service.get("devices"):
             raise ValueError("Abbruch: Erweiterte Hostrechte sind nicht erlaubt.")
@@ -74,6 +77,10 @@ def check_configuration(source):
         if any(volume["type"] != "volume" for volume in service.get("volumes", [])):
             raise ValueError("Abbruch: Hostverzeichnisse werden nicht eingebunden.")
     backend = config["services"]["backend"]["environment"]
+    if (backend["Admin__Email"] != "admin@gordons.test"
+            or backend["Admin__Password"] != backend["ADMIN_PASSWORD"]
+            or backend["Jwt__Key"] != backend["JWT_KEY"]):
+        raise ValueError("Abbruch: Lokale Zugangsdaten müssen Entwicklungsvorgaben überschreiben.")
     if backend["CONNECTION_STRING"] != "Data Source=/data/openresto.db":
         raise ValueError("Unerwarteter Datenbankpfad.")
     if backend["WEBSITE_URL"] != "http://localhost:5062":
