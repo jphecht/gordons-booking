@@ -234,11 +234,14 @@ export async function adminExtendBooking(
 ): Promise<{ endTime: string } | null> {
   try {
     const res = await post(`/admin/bookings/${id}/extend`, { minutes });
-    if (!res.ok) throw new Error("Failed to extend booking");
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(apiErrorMessage(body, "Failed to extend booking"));
+    }
     return await res.json();
   } catch (err) {
     console.error("adminExtendBooking error:", err);
-    return null;
+    throw err;
   }
 }
 
@@ -384,15 +387,26 @@ export async function unpauseRestaurantBookings(id: number): Promise<boolean> {
 export async function extendRestaurantBookings(
   id: number,
   minutes: number
-): Promise<{ ok: boolean; extendedBookings: BookingDetailDto[] }> {
+): Promise<{ ok: boolean; extendedBookings: BookingDetailDto[]; error?: string }> {
   try {
     const res = await post(`/admin/restaurants/${id}/extend`, { minutes });
-    if (!res.ok) return { ok: false, extendedBookings: [] };
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      return {
+        ok: false,
+        extendedBookings: [],
+        error: apiErrorMessage(body, "Failed to extend bookings"),
+      };
+    }
     const data = await res.json();
     return { ok: true, extendedBookings: data.extendedBookings || [] };
   } catch (err) {
     console.error("extendRestaurantBookings error:", err);
-    return { ok: false, extendedBookings: [] };
+    return {
+      ok: false,
+      extendedBookings: [],
+      error: err instanceof Error ? err.message : "Failed to extend bookings",
+    };
   }
 }
 

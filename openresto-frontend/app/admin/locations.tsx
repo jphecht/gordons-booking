@@ -29,6 +29,7 @@ import { ScheduleConflictsPanel } from "@/components/admin/locations/ScheduleCon
 import { BookingDetailPopup } from "@/components/admin/bookings/BookingDetailPopup";
 import { styles } from "@/components/admin/settings/settings.styles";
 import { Icon } from "@/components/common/Icon";
+import { theme } from "@/theme/theme";
 import { fmtTime } from "@/utils/formatters";
 
 function locationCountSummary(activeCount: number, archivedCount: number, t: TFunction): string {
@@ -61,6 +62,7 @@ export default function AdminLocationsScreen() {
   const [extending, setExtending] = useState(false);
   const [extendedBookings, setExtendedBookings] = useState<BookingDetailDto[] | null>(null);
   const [extendNoActive, setExtendNoActive] = useState(false);
+  const [extendError, setExtendError] = useState<string | null>(null);
   const [archiving, setArchiving] = useState(false);
   const [archiveFailed, setArchiveFailed] = useState(false);
   const [deletedName, setDeletedName] = useState<string | null>(null);
@@ -139,6 +141,7 @@ export default function AdminLocationsScreen() {
     selectAndRemember(id);
     setExtendedBookings(null);
     setExtendNoActive(false);
+    setExtendError(null);
     setArchiveFailed(false);
     setDeletedName(null);
   }
@@ -312,14 +315,24 @@ export default function AdminLocationsScreen() {
               })}
               onPress={async () => {
                 setExtending(true);
-                const result = await extendRestaurantBookings(selectedRestaurant.id, 60);
-                setExtending(false);
-                if (result.ok) {
+                setExtendError(null);
+                try {
+                  const result = await extendRestaurantBookings(selectedRestaurant.id, 60);
+                  if (!result.ok) {
+                    setExtendError(result.error ?? t("admin.bookings.detail.failedToUpdate"));
+                    return;
+                  }
                   if (result.extendedBookings.length > 0) {
                     setExtendedBookings(result.extendedBookings);
                   } else {
                     setExtendNoActive(true);
                   }
+                } catch (err) {
+                  setExtendError(
+                    err instanceof Error ? err.message : t("admin.bookings.detail.failedToUpdate")
+                  );
+                } finally {
+                  setExtending(false);
                 }
               }}
             >
@@ -335,6 +348,12 @@ export default function AdminLocationsScreen() {
             </Button>
           </View>
         )}
+
+        {extendError !== null ? (
+          <ThemedText accessibilityRole="alert" style={{ color: theme.colors.error }}>
+            {extendError}
+          </ThemedText>
+        ) : null}
 
         {allRestaurants.length === 0 ? (
           <View

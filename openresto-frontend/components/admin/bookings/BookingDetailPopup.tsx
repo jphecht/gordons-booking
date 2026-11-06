@@ -221,12 +221,19 @@ export function BookingDetailPopup({
   const handleExtend = async (minutes: number) => {
     if (!booking) return;
     setExtending(true);
-    const result = await adminExtendBooking(booking.id, minutes);
-    if (result) {
+    setErrorMessage(null);
+    try {
+      const result = await adminExtendBooking(booking.id, minutes);
+      if (!result) throw new Error(t("admin.bookings.detail.failedToUpdate"));
       setBooking((prev) => (prev ? { ...prev, endTime: result.endTime } : prev));
       onMutated?.();
+    } catch (err) {
+      setErrorMessage(
+        err instanceof Error ? err.message : t("admin.bookings.detail.failedToUpdate")
+      );
+    } finally {
+      setExtending(false);
     }
-    setExtending(false);
   };
 
   const handleSetStatus = async (status: BookingStatus) => {

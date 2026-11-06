@@ -39,9 +39,11 @@ export default function RestaurantActionModal({
   const [submitting, setSubmitting] = useState<number | null>(null);
   const [extendedBookings, setExtendedBookings] = useState<BookingDetailDto[] | null>(null);
   const [willPauseUntil, setWillPauseUntil] = useState("");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   async function loadRestaurants() {
     setExtendedBookings(null);
+    setErrorMessage(null);
     setWillPauseUntil(fmtTime(new Date(Date.now() + 60 * 60 * 1000)));
     setLoading(true);
     try {
@@ -68,10 +70,15 @@ export default function RestaurantActionModal({
   ) {
     if (submitting !== null) return;
     setSubmitting(restaurantId);
+    setErrorMessage(null);
 
     try {
       if (actionType === "extend") {
         const result = await extendRestaurantBookings(restaurantId, 60);
+        if (!result.ok) {
+          setErrorMessage(result.error ?? t("admin.bookings.detail.failedToUpdate"));
+          return;
+        }
         if (result.ok) {
           if (result.extendedBookings.length > 0) {
             setExtendedBookings(result.extendedBookings);
@@ -101,6 +108,9 @@ export default function RestaurantActionModal({
       }
     } catch (err) {
       console.error(`Failed to ${actionType} bookings for restaurant`, err);
+      setErrorMessage(
+        err instanceof Error ? err.message : t("admin.bookings.detail.failedToUpdate")
+      );
     } finally {
       setSubmitting(null);
     }
@@ -151,6 +161,12 @@ export default function RestaurantActionModal({
                 ? t("admin.bookings.restaurantAction.pauseSubtitle")
                 : t("admin.bookings.restaurantAction.extendSubtitle")}
           </ThemedText>
+
+          {errorMessage !== null ? (
+            <ThemedText accessibilityRole="alert" style={{ color: theme.colors.error }}>
+              {errorMessage}
+            </ThemedText>
+          ) : null}
 
           {loading ? (
             <ActivityIndicator

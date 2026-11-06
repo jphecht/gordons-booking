@@ -739,7 +739,7 @@ describe("BookingDetailPopup", () => {
     });
   });
 
-  it("handles extend when result is null (no-op)", async () => {
+  it("shows an error when extending returns no result", async () => {
     (adminApi.adminExtendBooking as jest.Mock).mockResolvedValue(null);
     render(<BookingDetailPopup {...baseProps} />);
     await waitFor(() => expect(screen.getByTestId("extend-btn")).toBeTruthy());
@@ -747,6 +747,23 @@ describe("BookingDetailPopup", () => {
       fireEvent.press(screen.getByTestId("extend-btn"));
     });
     expect(adminApi.adminExtendBooking).toHaveBeenCalledWith(1, 30);
+    expect(screen.getByTestId("alert-message")).toBeTruthy();
+  });
+
+  it("shows an extension conflict without reporting a successful mutation", async () => {
+    const onMutated = jest.fn();
+    (adminApi.adminExtendBooking as jest.Mock).mockRejectedValue(
+      new Error("A following reservation would overlap.")
+    );
+    render(<BookingDetailPopup {...baseProps} onMutated={onMutated} />);
+    await waitFor(() => expect(screen.getByTestId("extend-btn")).toBeTruthy());
+    await act(async () => {
+      fireEvent.press(screen.getByTestId("extend-btn"));
+    });
+    expect(screen.getByTestId("alert-message").props.children).toBe(
+      "A following reservation would overlap."
+    );
+    expect(onMutated).not.toHaveBeenCalled();
   });
 
   it("calls sendBookingEmail when send email button is pressed with content", async () => {
